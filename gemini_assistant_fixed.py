@@ -1101,17 +1101,518 @@ if st.session_state.api_configured:
             if evaluation_method in evaluation_descriptions:
                 st.info(evaluation_descriptions[evaluation_method])
 
-    # ------------------ Other sections remain the same but simplified ------------------
+    # ------------------ Batch Processing Section ------------------
     elif selected == "⚡ Batch Processing":
-        st.markdown("## ⚡ Batch Processing")
-        st.info("🚧 This feature will be available in the next update. Use individual prompting techniques for now.")
-    
+        st.markdown("## ⚡ Parallel Batch Processing")
+        
+        st.markdown("""
+        <div class="info-box">
+            <h4>🚀 High-Performance Concurrent Processing</h4>
+            <p>Process multiple prompts simultaneously using advanced techniques with real-time progress tracking.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([2.5, 1.5])
+        
+        with col1:
+            st.markdown('<div class="technique-card">', unsafe_allow_html=True)
+            
+            # Batch input method
+            batch_method = st.radio(
+                "📝 Input Method:",
+                ["Manual Entry", "Upload File", "Template Generator"]
+            )
+            
+            prompts_to_process = []
+            
+            if batch_method == "Manual Entry":
+                batch_text = st.text_area(
+                    "Enter prompts (one per line):",
+                    height=200,
+                    placeholder="Write a summary of artificial intelligence\nExplain quantum computing basics\nCreate a business plan outline\nAnalyze market trends in tech"
+                )
+                prompts_to_process = [p.strip() for p in batch_text.split('\n') if p.strip()]
+            
+            elif batch_method == "Upload File":
+                uploaded_file = st.file_uploader("📁 Upload text file", type=['txt'], 
+                                                help="Upload a .txt file with one prompt per line")
+                if uploaded_file:
+                    content = str(uploaded_file.read(), "utf-8")
+                    prompts_to_process = [p.strip() for p in content.split('\n') if p.strip()]
+                    st.success(f"✅ Loaded {len(prompts_to_process)} prompts from file")
+            
+            elif batch_method == "Template Generator":
+                template_category = st.selectbox(
+                    "🎯 Template Category:",
+                    ["Business Analysis", "Educational Content", "Creative Writing", "Technical Reviews"]
+                )
+                
+                templates = {
+                    "Business Analysis": [
+                        "Analyze market opportunities for {industry}",
+                        "Create competitive analysis for {company_type}",
+                        "Develop pricing strategy for {product}",
+                        "Assess market risks in {sector}"
+                    ],
+                    "Educational Content": [
+                        "Explain {concept} to beginners",
+                        "Create study guide for {subject}",
+                        "Compare {topic1} vs {topic2}",
+                        "List key principles of {field}"
+                    ],
+                    "Creative Writing": [
+                        "Write a story about {theme}",
+                        "Create character description for {character_type}",
+                        "Develop plot outline for {genre}",
+                        "Write dialogue between {characters}"
+                    ],
+                    "Technical Reviews": [
+                        "Review code quality for {language}",
+                        "Analyze system architecture for {system_type}",
+                        "Evaluate security for {application}",
+                        "Optimize performance for {platform}"
+                    ]
+                }
+                
+                if template_category in templates:
+                    template_list = templates[template_category]
+                    
+                    # Extract unique variables
+                    all_vars = set()
+                    for template in template_list:
+                        import re
+                        vars_found = re.findall(r'{(\w+)}', template)
+                        all_vars.update(vars_found)
+                    
+                    st.markdown("**📋 Fill Template Variables:**")
+                    variables = {}
+                    for var in sorted(all_vars):
+                        variables[var] = st.text_input(f"{var.replace('_', ' ').title()}:", key=f"batch_var_{var}")
+                    
+                    if st.button("🎯 Generate Batch Prompts"):
+                        if all(variables.values()):
+                            prompts_to_process = []
+                            for template in template_list:
+                                try:
+                                    formatted_prompt = template.format(**variables)
+                                    prompts_to_process.append(formatted_prompt)
+                                except KeyError as e:
+                                    st.warning(f"Missing variable: {e}")
+                            
+                            if prompts_to_process:
+                                st.success(f"✅ Generated {len(prompts_to_process)} prompts")
+                        else:
+                            st.warning("⚠️ Please fill all template variables")
+            
+            # Batch processing configuration
+            if prompts_to_process:
+                st.markdown(f"### 🎯 Batch Configuration ({len(prompts_to_process)} prompts)")
+                
+                col_config1, col_config2 = st.columns(2)
+                with col_config1:
+                    technique_for_batch = st.selectbox(
+                        "🧠 Apply Technique to All:",
+                        ["Zero-shot", "Chain of Thought", "ReAct", "Role-based", "Instruction-based"]
+                    )
+                    max_workers = st.slider("🔧 Concurrent Workers", 1, 8, min(4, len(prompts_to_process)))
+                
+                with col_config2:
+                    role_for_batch = st.selectbox(
+                        "👤 Role (if Role-based selected):",
+                        ["business_analyst", "data_scientist", "teacher", "consultant"]
+                    ) if technique_for_batch == "Role-based" else None
+                    
+                    timeout_seconds = st.slider("⏱️ Timeout per Prompt (seconds)", 30, 180, 60)
+                
+                if st.button("🚀 Start Batch Processing", use_container_width=True):
+                    
+                    def process_batch_prompt(prompt_data):
+                        index, prompt = prompt_data
+                        try:
+                            # Apply selected technique
+                            if technique_for_batch == "Zero-shot":
+                                final_prompt = PromptingTechniques.zero_shot(prompt)
+                            elif technique_for_batch == "Chain of Thought":
+                                final_prompt = PromptingTechniques.chain_of_thought(prompt)
+                            elif technique_for_batch == "ReAct":
+                                final_prompt = PromptingTechniques.react_prompting(prompt, 3)
+                            elif technique_for_batch == "Role-based":
+                                final_prompt = PromptingTechniques.role_based_prompting(prompt, role_for_batch)
+                            elif technique_for_batch == "Instruction-based":
+                                final_prompt = PromptingTechniques.instruction_based(prompt, ["Be comprehensive", "Use examples", "Be clear"])
+                            else:
+                                final_prompt = prompt
+                            
+                            result = st.session_state.langfuse_tracker.run_prompt_with_tracing(
+                                final_prompt,
+                                f"batch_{technique_for_batch.lower()}",
+                                batch_index=index,
+                                batch_technique=technique_for_batch
+                            )
+                            result.metadata = result.metadata or {}
+                            result.metadata['batch_index'] = index
+                            result.metadata['batch_technique'] = technique_for_batch
+                            return result
+                            
+                        except Exception as e:
+                            return PromptResult(
+                                prompt=prompt,
+                                output=f"Error: {str(e)}",
+                                technique=f"batch_{technique_for_batch.lower()}",
+                                length=0,
+                                input_tokens=len(prompt.split()),
+                                output_tokens=0,
+                                time_taken=0,
+                                trace_id=None,
+                                timestamp=datetime.now(),
+                                metadata={'error': True, 'batch_index': index}
+                            )
+                    
+                    # Execute batch processing
+                    start_time = time.time()
+                    results = []
+                    
+                    progress_bar = st.progress(0)
+                    status_container = st.empty()
+                    results_container = st.container()
+                    
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        # Submit all tasks
+                        future_to_prompt = {
+                            executor.submit(process_batch_prompt, (i, prompt)): (i, prompt)
+                            for i, prompt in enumerate(prompts_to_process)
+                        }
+                        
+                        completed = 0
+                        for future in concurrent.futures.as_completed(future_to_prompt, timeout=timeout_seconds):
+                            try:
+                                result = future.result()
+                                results.append(result)
+                                st.session_state.prompt_results.append(result)
+                                completed += 1
+                                
+                                # Update progress
+                                progress = completed / len(prompts_to_process)
+                                progress_bar.progress(progress)
+                                status_container.text(f"✅ Completed: {completed}/{len(prompts_to_process)}")
+                                
+                            except Exception as e:
+                                st.error(f"❌ Task failed: {str(e)}")
+                    
+                    total_time = time.time() - start_time
+                    
+                    # Display batch results
+                    with results_container:
+                        st.markdown("### 🎯 Batch Processing Results")
+                        
+                        # Summary metrics
+                        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                        col_s1.metric("Total Time", f"{total_time:.2f}s")
+                        col_s2.metric("Avg per Prompt", f"{total_time/len(results):.2f}s")
+                        col_s3.metric("Success Rate", f"{len([r for r in results if not r.metadata.get('error', False)])}/{len(results)}")
+                        col_s4.metric("Total Tokens", sum([r.input_tokens + r.output_tokens for r in results]))
+                        
+                        # Individual results in expandable sections
+                        for result in sorted(results, key=lambda x: x.metadata.get('batch_index', 0)):
+                            if not result.metadata.get('error', False):
+                                with st.expander(f"📝 Prompt {result.metadata.get('batch_index', 0) + 1}: {result.prompt[:60]}..."):
+                                    st.markdown(f"**Response:**\n{result.output}")
+                                    
+                                    col_r1, col_r2, col_r3 = st.columns(3)
+                                    col_r1.metric("Time", f"{result.time_taken:.2f}s")
+                                    col_r2.metric("Length", result.length)
+                                    col_r3.metric("Tokens", f"{result.input_tokens + result.output_tokens}")
+                                    
+                                    if result.trace_id:
+                                        st.markdown(f"🔗 [View Trace](https://cloud.langfuse.com/traces/{result.trace_id})")
+                        
+                        # Batch download
+                        if results:
+                            combined_results = "\n\n" + "="*80 + "\n\n".join([
+                                f"PROMPT {r.metadata.get('batch_index', 0)+1}:\n{r.prompt}\n\nTECHNIQUE: {r.technique}\n\nRESPONSE:\n{r.output}"
+                                for r in sorted(results, key=lambda x: x.metadata.get('batch_index', 0))
+                            ])
+                            
+                            st.markdown(
+                                create_download_link(
+                                    combined_results,
+                                    f"batch_results_{technique_for_batch}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+                                ),
+                                unsafe_allow_html=True
+                            )
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown("### ⚡ Batch Processing Guide")
+            
+            st.info("""
+            **🎯 Key Features:**
+            - Concurrent processing up to 8 prompts
+            - Apply any technique to entire batch
+            - Real-time progress tracking
+            - Automatic error handling
+            - Comprehensive results export
+            """)
+            
+            if prompts_to_process:
+                st.markdown("### 📊 Batch Preview")
+                st.write(f"**Total Prompts:** {len(prompts_to_process)}")
+                st.write(f"**Estimated Time:** {len(prompts_to_process) * 3:.0f}-{len(prompts_to_process) * 8:.0f}s")
+                
+                st.markdown("**Sample Prompts:**")
+                for i, prompt in enumerate(prompts_to_process[:3]):
+                    st.write(f"{i+1}. {prompt[:50]}...")
+                if len(prompts_to_process) > 3:
+                    st.write(f"... and {len(prompts_to_process) - 3} more")
+
+    # ------------------ Vision Analysis Section ------------------
     elif selected == "🖼️ Vision Analysis":
-        st.markdown("## 🖼️ Vision Analysis")
-        st.info("🚧 This feature will be available in the next update. Use individual prompting techniques for now.")
+        st.markdown("## 🖼️ Advanced Vision Analysis")
+        
+        st.markdown("""
+        <div class="info-box">
+            <h4>🎨 Multimodal AI with Advanced Vision Techniques</h4>
+            <p>Upload images and apply sophisticated analysis techniques with detailed insights and downloadable reports.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([2.5, 1.5])
+        
+        with col1:
+            st.markdown('<div class="technique-card">', unsafe_allow_html=True)
+            
+            # Image upload
+            uploaded_images = st.file_uploader(
+                "📷 Upload Images",
+                type=['png', 'jpg', 'jpeg', 'gif', 'webp'],
+                accept_multiple_files=True,
+                help="Upload one or more images for analysis"
+            )
+            
+            if uploaded_images:
+                st.markdown(f"### 📸 Uploaded Images ({len(uploaded_images)})")
+                
+                # Display thumbnails
+                cols = st.columns(min(3, len(uploaded_images)))
+                for i, img_file in enumerate(uploaded_images[:3]):
+                    with cols[i % 3]:
+                        image = Image.open(img_file)
+                        st.image(image, caption=f"Image {i+1}", use_column_width=True)
+                
+                if len(uploaded_images) > 3:
+                    st.info(f"📁 {len(uploaded_images) - 3} more images uploaded")
+            
+            # Analysis configuration
+            st.markdown("### 🔧 Analysis Configuration")
+            
+            analysis_technique = st.selectbox(
+                "🧠 Vision Analysis Technique:",
+                [
+                    "Standard Description",
+                    "Chain of Thought Analysis", 
+                    "Role-based Expert Analysis",
+                    "Detailed Technical Assessment",
+                    "Creative Interpretation",
+                    "Comparative Analysis"
+                ]
+            )
+            
+            analysis_focus = st.multiselect(
+                "🎯 Analysis Focus Areas:",
+                [
+                    "Objects & People",
+                    "Colors & Composition", 
+                    "Text Extraction (OCR)",
+                    "Emotional Tone",
+                    "Technical Quality",
+                    "Artistic Elements",
+                    "Business Applications",
+                    "Accessibility Description"
+                ],
+                default=["Objects & People", "Colors & Composition"]
+            )
+            
+            # Custom prompt
+            custom_prompt = st.text_area(
+                "✏️ Additional Instructions (Optional):",
+                height=80,
+                placeholder="Any specific questions or aspects you want the AI to focus on..."
+            )
+            
+            # Analysis settings
+            col_set1, col_set2 = st.columns(2)
+            with col_set1:
+                detail_level = st.select_slider(
+                    "📊 Detail Level:",
+                    options=["Brief", "Standard", "Comprehensive"],
+                    value="Standard"
+                )
+            
+            with col_set2:
+                if analysis_technique == "Role-based Expert Analysis":
+                    expert_role = st.selectbox(
+                        "👤 Expert Role:",
+                        ["photographer", "designer", "marketer", "security_analyst", "art_critic", "accessibility_expert"]
+                    )
+            
+            # Process images
+            if uploaded_images and st.button("🔍 Analyze Images", use_container_width=True):
+                
+                def create_vision_prompt(technique, focus_areas, custom_instructions, detail_level, role=None):
+                    base_analysis = {
+                        "Standard Description": "Provide a comprehensive description of this image.",
+                        "Chain of Thought Analysis": "Analyze this image step-by-step: 1) First impression 2) Detailed observation 3) Context analysis 4) Final assessment",
+                        "Role-based Expert Analysis": f"As a professional {role}, analyze this image from your expert perspective.",
+                        "Detailed Technical Assessment": "Provide a technical analysis including image quality, composition, lighting, and photographic techniques.",
+                        "Creative Interpretation": "Provide a creative interpretation including mood, story, symbolism, and artistic elements.",
+                        "Comparative Analysis": "Analyze this image by comparing and contrasting its elements, identifying patterns and relationships."
+                    }
+                    
+                    focus_instructions = {
+                        "Objects & People": "Identify and describe all objects, people, and their relationships.",
+                        "Colors & Composition": "Analyze color palette, composition rules, visual balance, and aesthetic elements.",
+                        "Text Extraction (OCR)": "Extract and transcribe all visible text, signs, and written content.",
+                        "Emotional Tone": "Assess the emotional impact, mood, and psychological elements conveyed.",
+                        "Technical Quality": "Evaluate image quality, resolution, lighting, focus, and technical aspects.",
+                        "Artistic Elements": "Analyze artistic techniques, style, visual storytelling, and creative elements.",
+                        "Business Applications": "Identify potential business uses, marketing value, and commercial applications.",
+                        "Accessibility Description": "Create detailed accessibility descriptions for visually impaired users."
+                    }
+                    
+                    prompt = base_analysis[technique] + "\n\n"
+                    
+                    if focus_areas:
+                        prompt += "Focus specifically on:\n"
+                        for area in focus_areas:
+                            prompt += f"- {focus_instructions[area]}\n"
+                        prompt += "\n"
+                    
+                    if custom_instructions:
+                        prompt += f"Additional requirements: {custom_instructions}\n\n"
+                    
+                    prompt += f"Provide a {detail_level.lower()} analysis with clear structure and actionable insights."
+                    
+                    return prompt
+                
+                # Process each image
+                for i, img_file in enumerate(uploaded_images):
+                    st.markdown(f"### 📷 Analysis {i+1}: {img_file.name}")
+                    
+                    with st.spinner(f"🔄 Analyzing image {i+1}..."):
+                        try:
+                            # Load image
+                            image = Image.open(img_file)
+                            
+                            # Create analysis prompt
+                            vision_prompt = create_vision_prompt(
+                                analysis_technique, 
+                                analysis_focus, 
+                                custom_prompt, 
+                                detail_level,
+                                expert_role if analysis_technique == "Role-based Expert Analysis" else None
+                            )
+                            
+                            # Use Gemini Vision
+                            model = genai.GenerativeModel('gemini-1.5-flash')
+                            response = model.generate_content([vision_prompt, image])
+                            
+                            # Create result
+                            result = PromptResult(
+                                prompt=vision_prompt,
+                                output=response.text,
+                                technique=f"vision_{analysis_technique.lower().replace(' ', '_')}",
+                                length=len(response.text),
+                                input_tokens=len(vision_prompt.split()),
+                                output_tokens=len(response.text.split()),
+                                time_taken=0,  # Gemini doesn't provide timing
+                                trace_id=None,
+                                timestamp=datetime.now(),
+                                metadata={
+                                    'image_name': img_file.name,
+                                    'analysis_technique': analysis_technique,
+                                    'focus_areas': analysis_focus,
+                                    'detail_level': detail_level,
+                                    'image_size': f"{image.size[0]}×{image.size[1]}",
+                                    'image_format': image.format
+                                }
+                            )
+                            
+                            # Log to Langfuse if configured
+                            if st.session_state.langfuse_tracker.is_configured:
+                                try:
+                                    result.trace_id = st.session_state.langfuse_tracker.langfuse.trace(
+                                        name=f"vision_analysis_{i+1}",
+                                        session_id=st.session_state.langfuse_tracker.session_id,
+                                        input={"prompt": vision_prompt, "image": img_file.name},
+                                        output={"response": response.text},
+                                        metadata=result.metadata
+                                    ).id
+                                except:
+                                    pass
+                            
+                            st.session_state.prompt_results.append(result)
+                            
+                            # Display results
+                            st.markdown(f'<div class="response-container">{response.text}</div>', unsafe_allow_html=True)
+                            
+                            # Image metadata
+                            col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+                            col_info1.metric("Size", f"{image.size[0]}×{image.size[1]}")
+                            col_info2.metric("Format", image.format)
+                            col_info3.metric("Mode", image.mode)
+                            col_info4.metric("Response Length", len(response.text))
+                            
+                            # Download option
+                            st.markdown(
+                                create_download_link(
+                                    f"Image: {img_file.name}\nTechnique: {analysis_technique}\nFocus: {', '.join(analysis_focus)}\n\nAnalysis:\n{response.text}",
+                                    f"vision_analysis_{img_file.name.split('.')[0]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+                                ),
+                                unsafe_allow_html=True
+                            )
+                            
+                            if result.trace_id:
+                                st.markdown(f"🔗 [View Trace](https://cloud.langfuse.com/traces/{result.trace_id})")
+                            
+                        except Exception as e:
+                            st.error(f"❌ Error analyzing image {i+1}: {str(e)}")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown("### 🎨 Vision Analysis Guide")
+            
+            technique_guide = {
+                "Standard Description": "Comprehensive overview of image content and context.",
+                "Chain of Thought Analysis": "Step-by-step systematic analysis with reasoning.",
+                "Role-based Expert Analysis": "Professional perspective from domain experts.",
+                "Detailed Technical Assessment": "Technical evaluation of image quality and composition.",
+                "Creative Interpretation": "Artistic and creative analysis of visual elements.",
+                "Comparative Analysis": "Comparative examination of elements and relationships."
+            }
+            
+            if 'analysis_technique' in locals():
+                st.info(technique_guide.get(analysis_technique, "Advanced vision analysis technique"))
+            
+            st.markdown("### 📊 Supported Formats")
+            st.write("• PNG, JPG, JPEG")
+            st.write("• GIF, WebP")
+            st.write("• Max size: 20MB")
+            st.write("• Multiple images supported")
+            
+            if uploaded_images:
+                st.markdown("### 📁 Upload Summary")
+                total_size = sum([img.size for img in uploaded_images]) / (1024*1024)  # MB
+                st.write(f"**Images:** {len(uploaded_images)}")
+                st.write(f"**Total Size:** {total_size:.1f} MB")
+                
+                for i, img in enumerate(uploaded_images[:3]):
+                    img_obj = Image.open(img)
+                    st.write(f"{i+1}. {img.name} ({img_obj.size[0]}×{img_obj.size[1]})")
     
     elif selected == "📊 Analytics Dashboard":
-        st.markdown("## 📊 Analytics Dashboard")
+        st.markdown("## 📊 Comprehensive Analytics Dashboard")
         
         if not st.session_state.prompt_results:
             st.markdown("""
@@ -1134,46 +1635,317 @@ if st.session_state.api_configured:
                     'output_tokens': result.output_tokens,
                     'total_tokens': result.input_tokens + result.output_tokens,
                     'trace_id': result.trace_id,
-                    'has_trace': result.trace_id is not None
+                    'has_trace': result.trace_id is not None,
+                    'hour': result.timestamp.hour,
+                    'efficiency': result.length / result.time_taken if result.time_taken > 0 else 0
                 })
             
             df = pd.DataFrame(results_data)
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             
-            # Overview metrics
+            # Enhanced Overview metrics with trends
             st.markdown("### 📈 Session Overview")
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
             
-            col_m1.metric("Total Prompts", len(df))
-            col_m2.metric("Avg Response Time", f"{df['time_taken'].mean():.2f}s")
-            col_m3.metric("Total Tokens", f"{df['total_tokens'].sum():,}")
-            col_m4.metric("Traced Prompts", df['has_trace'].sum())
+            # Calculate trends (last 5 vs previous)
+            recent_results = df.tail(5) if len(df) >= 5 else df
+            previous_results = df.head(len(df)-5) if len(df) > 5 else pd.DataFrame()
             
-            # Technique performance
-            if len(df) > 0:
-                col_perf1, col_perf2 = st.columns(2)
+            avg_time_trend = recent_results['time_taken'].mean() - previous_results['time_taken'].mean() if len(previous_results) > 0 else 0
+            avg_length_trend = recent_results['length'].mean() - previous_results['length'].mean() if len(previous_results) > 0 else 0
+            
+            col_m1.metric(
+                "Total Prompts", 
+                len(df),
+                delta=f"+{len(recent_results)}" if len(recent_results) > 0 else None
+            )
+            col_m2.metric(
+                "Avg Response Time", 
+                f"{df['time_taken'].mean():.2f}s",
+                delta=f"{avg_time_trend:+.2f}s" if avg_time_trend != 0 else None
+            )
+            col_m3.metric(
+                "Total Tokens", 
+                f"{df['total_tokens'].sum():,}",
+                delta=f"+{recent_results['total_tokens'].sum()}"
+            )
+            col_m4.metric(
+                "Traced Prompts", 
+                df['has_trace'].sum(),
+                delta=f"{df['has_trace'].sum()/len(df)*100:.0f}% traced"
+            )
+            col_m5.metric(
+                "Avg Efficiency", 
+                f"{df['efficiency'].mean():.0f} chars/s",
+                delta=f"{avg_length_trend:+.0f} chars" if avg_length_trend != 0 else None
+            )
+            
+            # Advanced Visualizations
+            st.markdown("### 📊 Performance Analytics")
+            
+            # Create comprehensive dashboard with subplots
+            from plotly.subplots import make_subplots
+            import plotly.graph_objects as go
+            
+            # Time series analysis
+            col_chart1, col_chart2 = st.columns(2)
+            
+            with col_chart1:
+                # Response time over time
+                fig_time = px.line(
+                    df, 
+                    x='timestamp', 
+                    y='time_taken',
+                    color='technique',
+                    title='⏱️ Response Time Trends',
+                    labels={'time_taken': 'Response Time (s)', 'timestamp': 'Time'}
+                )
+                fig_time.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    height=400
+                )
+                st.plotly_chart(fig_time, use_container_width=True)
+            
+            with col_chart2:
+                # Token usage scatter
+                fig_tokens = px.scatter(
+                    df, 
+                    x='input_tokens', 
+                    y='output_tokens',
+                    size='time_taken',
+                    color='technique',
+                    title='🎯 Token Usage Pattern',
+                    labels={'input_tokens': 'Input Tokens', 'output_tokens': 'Output Tokens'},
+                    hover_data=['length', 'time_taken']
+                )
+                fig_tokens.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    height=400
+                )
+                st.plotly_chart(fig_tokens, use_container_width=True)
+            
+            # Technique analysis
+            col_tech1, col_tech2 = st.columns(2)
+            
+            with col_tech1:
+                # Technique usage pie chart
+                technique_counts = df['technique'].value_counts()
+                fig_pie = px.pie(
+                    values=technique_counts.values,
+                    names=technique_counts.index,
+                    title='🧠 Technique Usage Distribution',
+                    color_discrete_sequence=px.colors.qualitative.Set3
+                )
+                fig_pie.update_layout(height=400)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            with col_tech2:
+                # Technique performance comparison
+                technique_stats = df.groupby('technique').agg({
+                    'time_taken': 'mean',
+                    'length': 'mean',
+                    'total_tokens': 'mean'
+                }).reset_index()
                 
-                with col_perf1:
-                    technique_counts = df['technique'].value_counts()
-                    fig_techniques = px.pie(
-                        values=technique_counts.values,
-                        names=technique_counts.index,
-                        title="Technique Usage Distribution"
-                    )
-                    st.plotly_chart(fig_techniques, use_container_width=True)
-                
-                with col_perf2:
-                    technique_performance = df.groupby('technique')['time_taken'].mean()
-                    fig_performance = px.bar(
-                        x=technique_performance.index,
-                        y=technique_performance.values,
-                        title="Average Response Time by Technique"
-                    )
-                    st.plotly_chart(fig_performance, use_container_width=True)
+                fig_comparison = px.bar(
+                    technique_stats,
+                    x='technique',
+                    y='time_taken',
+                    title='⚡ Avg Response Time by Technique',
+                    labels={'time_taken': 'Avg Response Time (s)', 'technique': 'Technique'},
+                    color='time_taken',
+                    color_continuous_scale='viridis'
+                )
+                fig_comparison.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    height=400,
+                    xaxis={'tickangle': 45}
+                )
+                st.plotly_chart(fig_comparison, use_container_width=True)
             
-            # Data table
-            st.markdown("### 📋 Detailed Results")
-            st.dataframe(df, use_container_width=True)
+            # Advanced analytics
+            st.markdown("### 🔍 Advanced Analytics")
+            
+            col_adv1, col_adv2, col_adv3 = st.columns(3)
+            
+            with col_adv1:
+                # Efficiency analysis
+                fig_efficiency = px.box(
+                    df,
+                    x='technique',
+                    y='efficiency',
+                    title='📈 Efficiency Distribution (chars/sec)',
+                    color='technique'
+                )
+                fig_efficiency.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    height=300,
+                    xaxis={'tickangle': 45}
+                )
+                st.plotly_chart(fig_efficiency, use_container_width=True)
+            
+            with col_adv2:
+                # Hourly activity
+                hourly_activity = df.groupby('hour').size()
+                fig_hourly = px.bar(
+                    x=hourly_activity.index,
+                    y=hourly_activity.values,
+                    title='🕐 Activity by Hour',
+                    labels={'x': 'Hour of Day', 'y': 'Number of Prompts'},
+                    color=hourly_activity.values,
+                    color_continuous_scale='blues'
+                )
+                fig_hourly.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    height=300
+                )
+                st.plotly_chart(fig_hourly, use_container_width=True)
+            
+            with col_adv3:
+                # Length vs Time correlation
+                fig_correlation = px.scatter(
+                    df,
+                    x='length',
+                    y='time_taken',
+                    trendline='ols',
+                    title='🔗 Length vs Response Time',
+                    labels={'length': 'Response Length', 'time_taken': 'Time (s)'},
+                    color='technique'
+                )
+                fig_correlation.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    height=300
+                )
+                st.plotly_chart(fig_correlation, use_container_width=True)
+            
+            # Comprehensive performance matrix
+            st.markdown("### 📋 Performance Matrix")
+            
+            performance_matrix = df.groupby('technique').agg({
+                'time_taken': ['mean', 'std', 'min', 'max'],
+                'length': ['mean', 'std'],
+                'total_tokens': ['mean', 'sum'],
+                'has_trace': 'sum'
+            }).round(2)
+            
+            performance_matrix.columns = [
+                'Avg Time', 'Time StdDev', 'Min Time', 'Max Time',
+                'Avg Length', 'Length StdDev', 'Avg Tokens', 'Total Tokens', 'Traces'
+            ]
+            
+            st.dataframe(performance_matrix, use_container_width=True)
+            
+            # Detailed results with advanced filtering
+            st.markdown("### 🔍 Detailed Results")
+            
+            # Advanced filters
+            col_filter1, col_filter2, col_filter3, col_filter4 = st.columns(4)
+            
+            with col_filter1:
+                technique_filter = st.multiselect(
+                    "Filter by Technique:",
+                    options=df['technique'].unique(),
+                    default=df['technique'].unique()
+                )
+            
+            with col_filter2:
+                min_time = st.number_input("Min Response Time (s):", 0.0, float(df['time_taken'].max()), 0.0)
+                max_time = st.number_input("Max Response Time (s):", 0.0, float(df['time_taken'].max()), float(df['time_taken'].max()))
+            
+            with col_filter3:
+                min_length = st.number_input("Min Length:", 0, int(df['length'].max()), 0)
+                max_length = st.number_input("Max Length:", 0, int(df['length'].max()), int(df['length'].max()))
+            
+            with col_filter4:
+                show_traced_only = st.checkbox("Show Only Traced")
+                sort_by = st.selectbox("Sort by:", ['timestamp', 'time_taken', 'length', 'total_tokens'])
+            
+            # Apply filters
+            filtered_df = df[
+                (df['technique'].isin(technique_filter)) &
+                (df['time_taken'] >= min_time) &
+                (df['time_taken'] <= max_time) &
+                (df['length'] >= min_length) &
+                (df['length'] <= max_length)
+            ]
+            
+            if show_traced_only:
+                filtered_df = filtered_df[filtered_df['has_trace'] == True]
+            
+            filtered_df = filtered_df.sort_values(sort_by, ascending=False)
+            
+            # Enhanced display columns
+            display_columns = [
+                'timestamp', 'technique', 'prompt', 'time_taken', 
+                'length', 'input_tokens', 'output_tokens', 'total_tokens', 'trace_id'
+            ]
+            
+            st.dataframe(
+                filtered_df[display_columns],
+                use_container_width=True,
+                column_config={
+                    'timestamp': st.column_config.DatetimeColumn('Time', format='MM/DD/YY HH:mm'),
+                    'technique': 'Technique',
+                    'prompt': st.column_config.TextColumn('Prompt', width='large'),
+                    'time_taken': st.column_config.NumberColumn('Time (s)', format='%.2f'),
+                    'length': st.column_config.NumberColumn('Length'),
+                    'input_tokens': st.column_config.NumberColumn('Input Tokens'),
+                    'output_tokens': st.column_config.NumberColumn('Output Tokens'),
+                    'total_tokens': st.column_config.NumberColumn('Total Tokens'),
+                    'trace_id': st.column_config.LinkColumn(
+                        'Trace',
+                        display_text="View Trace",
+                        help="Click to view in Langfuse"
+                    )
+                }
+            )
+            
+            # Export options
+            st.markdown("### 💾 Export Analytics")
+            col_export1, col_export2, col_export3, col_export4 = st.columns(4)
+            
+            with col_export1:
+                if st.button("📊 Export Full Dataset"):
+                    csv_data = df.to_csv(index=False)
+                    st.download_button(
+                        "Download CSV",
+                        csv_data,
+                        f"gemini_analytics_full_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        "text/csv"
+                    )
+            
+            with col_export2:
+                if st.button("📈 Export Performance Summary"):
+                    summary_data = performance_matrix.to_csv()
+                    st.download_button(
+                        "Download Summary",
+                        summary_data,
+                        f"performance_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        "text/csv"
+                    )
+            
+            with col_export3:
+                if st.button("🎯 Export Filtered Results"):
+                    filtered_csv = filtered_df.to_csv(index=False)
+                    st.download_button(
+                        "Download Filtered",
+                        filtered_csv,
+                        f"filtered_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        "text/csv"
+                    )
+            
+            with col_export4:
+                if st.button("🗑️ Clear Session Data"):
+                    if st.button("⚠️ Confirm Clear", type="primary"):
+                        st.session_state.prompt_results = []
+                        st.session_state.evaluation_results = []
+                        st.rerun()
 
 else:
     st.warning("⚠️ Please configure your Google API key in the sidebar to get started.")
