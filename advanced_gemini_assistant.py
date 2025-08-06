@@ -26,10 +26,14 @@ from dataclasses import dataclass
 try:
     from langfuse import Langfuse
     from langfuse.decorators import observe, langfuse_context
-    from langfuse.openai import openai
     LANGFUSE_AVAILABLE = True
 except ImportError:
     LANGFUSE_AVAILABLE = False
+    # Create dummy decorator when Langfuse is not available
+    def observe():
+        def decorator(func):
+            return func
+        return decorator
 
 # ------------------ Page Setup ------------------
 st.set_page_config(
@@ -224,29 +228,12 @@ class AdvancedLangfuseTracker:
                 return False
         return False
     
-    @observe()
     def run_prompt_with_tracing(self, prompt_text: str, technique: str, model_name: str = "gemini-1.5-flash", **kwargs):
         """Enhanced prompt execution with proper Langfuse tracing"""
         start_time = time.time()
+        trace_id = None
         
         try:
-            # Create trace
-            if self.is_configured:
-                trace = self.langfuse.trace(
-                    name=f"{technique}_execution",
-                    session_id=self.session_id,
-                    input={"prompt": prompt_text, "technique": technique, "model": model_name},
-                    metadata=kwargs
-                )
-                
-                # Create generation
-                generation = trace.generation(
-                    name=f"gemini_{technique}",
-                    model=model_name,
-                    input=prompt_text,
-                    metadata={"technique": technique}
-                )
-            
             # Execute with Gemini
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt_text)
@@ -259,30 +246,41 @@ class AdvancedLangfuseTracker:
             input_tokens = len(prompt_text.split())
             output_tokens = len(result_text.split())
             
-            # Update Langfuse with results
-            if self.is_configured:
-                generation.end(
-                    output=result_text,
-                    usage={
-                        "input": input_tokens,
-                        "output": output_tokens,
-                        "total": input_tokens + output_tokens
-                    }
-                )
-                
-                trace.update(
-                    output={"response": result_text},
-                    metadata={
-                        "time_taken": time_taken,
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "technique": technique
-                    }
-                )
-                
-                trace_id = trace.id
-            else:
-                trace_id = None
+            # Create Langfuse trace if configured
+            if self.is_configured and self.langfuse:
+                try:
+                    trace = self.langfuse.trace(
+                        name=f"{technique}_execution",
+                        session_id=self.session_id,
+                        input={"prompt": prompt_text, "technique": technique, "model": model_name},
+                        output={"response": result_text},
+                        metadata={
+                            "time_taken": time_taken,
+                            "input_tokens": input_tokens,
+                            "output_tokens": output_tokens,
+                            "technique": technique,
+                            **kwargs
+                        }
+                    )
+                    
+                    # Create generation within trace
+                    generation = trace.generation(
+                        name=f"gemini_{technique}",
+                        model=model_name,
+                        input=prompt_text,
+                        output=result_text,
+                        usage={
+                            "input": input_tokens,
+                            "output": output_tokens,
+                            "total": input_tokens + output_tokens
+                        },
+                        metadata={"technique": technique}
+                    )
+                    
+                    trace_id = trace.id
+                except Exception as langfuse_error:
+                    print(f"Langfuse tracing error: {langfuse_error}")
+                    trace_id = None
             
             return PromptResult(
                 prompt=prompt_text,
@@ -312,7 +310,7 @@ class AdvancedLangfuseTracker:
                 metadata={"error": str(e)}
             )
             
-            if self.is_configured:
+            if self.is_configured and self.langfuse:
                 try:
                     self.langfuse.trace(
                         name=f"{technique}_error",
@@ -321,8 +319,8 @@ class AdvancedLangfuseTracker:
                         output={"error": str(e)},
                         metadata={"technique": technique}
                     )
-                except:
-                    pass
+                except Exception as langfuse_error:
+                    print(f"Langfuse error logging failed: {langfuse_error}")
             
             return error_result
 
