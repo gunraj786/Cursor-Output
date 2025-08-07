@@ -1,0 +1,11 @@
+streamlit==1.29.0
+streamlit-option-menu==0.3.6
+google-generativeai==0.3.2
+langchain-google-genai==0.0.6
+langchain-core==0.1.0
+Pillow==10.1.0
+requests==2.31.0
+pandas==2.1.4
+plotly==5.17.0
+numpy==1.24.3
+langfuse==2.7.3
